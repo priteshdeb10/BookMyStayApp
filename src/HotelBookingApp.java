@@ -1,3 +1,4 @@
+
 abstract class Room {
     protected int numberOfBeds;
     protected int squareFeet;
@@ -11,124 +12,89 @@ abstract class Room {
 }
 
 class SingleRoom extends Room { public SingleRoom() { super(1, 250, 1500.0); } }
-
-class Reservation {
-    private String guestName;
-    private String roomType;
-
-    public Reservation(String guestName, String roomType) {
-        this.guestName = guestName;
-        this.roomType = roomType;
-    }
-
-    public String getGuestName() { return guestName; }
-    public String getRoomType() { return roomType; }
-}
-
-// --- 2. SHARED RESOURCES (Thread-Safe Targets) ---
+class DoubleRoom extends Room { public DoubleRoom() { super(2, 450, 2500.0); } }
 
 class RoomInventory {
     private Map<String, Integer> roomAvailability = new HashMap<>();
-    public RoomInventory() {
-        roomAvailability.put("Single", 5); // Limited stock to test concurrency
+
+    public Map<String, Integer> getRoomAvailability() {
+        return roomAvailability;
     }
-    public Map<String, Integer> getRoomAvailability() { return roomAvailability; }
+
     public void updateAvailability(String roomType, int count) {
         roomAvailability.put(roomType, count);
     }
 }
 
-class BookingRequestQueue {
-    private Queue<Reservation> requestQueue = new LinkedList<>();
-    public void addRequest(Reservation res) { requestQueue.offer(res); }
-    public Reservation getNextRequest() { return requestQueue.poll(); }
-    public boolean hasPendingRequests() { return !requestQueue.isEmpty(); }
-}
 
-class RoomAllocationService {
-    public void allocateRoom(Reservation res, RoomInventory inventory) {
-        int current = inventory.getRoomAvailability().get(res.getRoomType());
-        if (current > 0) {
-            inventory.updateAvailability(res.getRoomType(), current - 1);
-            System.out.println(Thread.currentThread().getName() + " SUCCESS: Allocated " +
-                    res.getRoomType() + " to " + res.getGuestName());
-        } else {
-            System.out.println(Thread.currentThread().getName() + " FAILED: No rooms left for " + res.getGuestName());
+class FilePersistenceService {
+
+    public void saveInventory(RoomInventory inventory, String filePath) {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
+            for (Map.Entry<String, Integer> entry : inventory.getRoomAvailability().entrySet()) {
+                writer.println(entry.getKey() + "=" + entry.getValue());
+            }
+            System.out.println("System State Saved to " + filePath);
+        } catch (IOException e) {
+            System.err.println("Error saving inventory: " + e.getMessage());
+        }
+    }
+
+    public void loadInventory(RoomInventory inventory, String filePath) {
+        File file = new File(filePath);
+        if (!file.exists()) {
+            System.out.println("No existing data found. Starting with fresh inventory.");
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split("=");
+                if (parts.length == 2) {
+                    String roomType = parts[0];
+                    int count = Integer.parseInt(parts[1]);
+                    inventory.updateAvailability(roomType, count);
+                }
+            }
+            System.out.println("System Recovery Successful: Data loaded from " + filePath);
+        } catch (IOException | NumberFormatException e) {
+            System.err.println("Error loading inventory: " + e.getMessage());
         }
     }
 }
 
-// --- 3. CONCURRENT PROCESSOR ---
-
-
-class ConcurrentBookingProcessor implements Runnable {
-    private BookingRequestQueue bookingQueue;
-    private RoomInventory inventory;
-    private RoomAllocationService allocationService;
-
-    public ConcurrentBookingProcessor(BookingRequestQueue queue, RoomInventory inv, RoomAllocationService service) {
-        this.bookingQueue = queue;
-        this.inventory = inv;
-        this.allocationService = service;
-    }
-
-    @Override
-    public void run() {
-        while (true) {
-            Reservation reservation = null;
-
-            // Synchronize on the queue to ensure only one thread pulls a request
-            synchronized (bookingQueue) {
-                if (bookingQueue.hasPendingRequests()) {
-                    reservation = bookingQueue.getNextRequest();
-                } else {
-                    break; // No more requests, exit thread
-                }
-            }
-
-            if (reservation != null) {
-                // Synchronize on inventory to prevent overbooking (Race Condition)
-                synchronized (inventory) {
-                    allocationService.allocateRoom(reservation, inventory);
-                }
-            }
-
-            // Small sleep to simulate network delay and show thread switching
-            try { Thread.sleep(100); } catch (InterruptedException e) {}
-        }
-    }
-}
 public class HotelBookingApp {
     public static void main(String[] args) {
-        System.out.println("Concurrent Booking Simulation Started\n");
+        System.out.println("Hotel Management - Persistence & Recovery\n");
 
-        // 1. Initialize Shared Resources
         RoomInventory inventory = new RoomInventory();
-        BookingRequestQueue bookingQueue = new BookingRequestQueue();
-        RoomAllocationService allocationService = new RoomAllocationService();
+        FilePersistenceService persistenceService = new FilePersistenceService();
+        String dataFile = "inventory_state.txt";
 
-        // 2. Pre-load the queue with 8 requests (only 5 rooms available)
-        for (int i = 1; i <= 8; i++) {
-            bookingQueue.addRequest(new Reservation("Guest-" + i, "Single"));
+        persistenceService.loadInventory(inventory, dataFile);
+
+        if (inventory.getRoomAvailability().isEmpty()) {
+            System.out.println("Initializing default room counts...");
+            inventory.updateAvailability("Single", 10);
+            inventory.updateAvailability("Double", 5);
         }
 
-        // 3. Create and start concurrent threads
-        Thread t1 = new Thread(new ConcurrentBookingProcessor(bookingQueue, inventory, allocationService), "Thread-1");
-        Thread t2 = new Thread(new ConcurrentBookingProcessor(bookingQueue, inventory, allocationService), "Thread-2");
+        System.out.println("\n--- Current Inventory Status ---");
+        inventory.getRoomAvailability().forEach((type, count) ->
+                System.out.println(type + ": " + count + " available"));
 
-        t1.start();
-        t2.start();
 
-        // 4. Wait for processing to complete
-        try {
-            t1.join();
-            t2.join();
-        } catch (InterruptedException e) {
-            System.out.println("Thread execution interrupted.");
+        System.out.println("\nBooking 1 Single Room...");
+        int singleCount = inventory.getRoomAvailability().get("Single");
+        if (singleCount > 0) {
+            inventory.updateAvailability("Single", singleCount - 1);
         }
 
-        System.out.println("\nSimulation Finished.");
-        System.out.println("Final Single Room Inventory: " + inventory.getRoomAvailability().get("Single"));
+
+        persistenceService.saveInventory(inventory, dataFile);
+
+        System.out.println("\nProcess complete. Try running the program again to see the counts persist!");
     }
 }
 
