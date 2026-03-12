@@ -9,58 +9,76 @@ abstract class Room {
         this.pricePerNight = pricePerNight;
     }
 
-    /
     public void displayRoomDetails() {
         System.out.println("Beds: " + numberOfBeds);
         System.out.println("Size: " + squareFeet + " sqft");
-        System.out.println("Price: " + pricePerNight);
+        System.out.println("Price per night: " + pricePerNight);
     }
 }
 
 
 
 class SingleRoom extends Room {
-    public SingleRoom() {
-        super(1, 250, 1500.0);
-    }
+    public SingleRoom() { super(1, 250, 1500.0); }
 }
 
 class DoubleRoom extends Room {
-    public DoubleRoom() {
-        super(2, 450, 2500.0);
-    }
+    public DoubleRoom() { super(2, 450, 2500.0); }
 }
 
 class SuiteRoom extends Room {
-    public SuiteRoom() {
-        super(3, 750, 5000.0);
+    public SuiteRoom() { super(3, 750, 5000.0); }
+}
+
+
+class RoomInventory {
+
+    private Map<String, Integer> roomAvailability;
+
+    public RoomInventory() {
+        roomAvailability = new HashMap<>();
+        initializeInventory();
+    }
+
+
+    private void initializeInventory() {
+        roomAvailability.put("Single", 5);
+        roomAvailability.put("Double", 3);
+        roomAvailability.put("Suite", 2);
+    }
+
+    public Map<String, Integer> getAllAvailability() {
+        return roomAvailability;
+    }
+
+    public void updateAvailability(String roomType, int count) {
+        roomAvailability.put(roomType, count);
     }
 }
+
 public class HotelBookingApp {
     public static void main(String[] args) {
-        System.out.println("Hotel Room Initialization\n");
+        System.out.println("Hotel Room Inventory Status\n");
 
-        // Availability tracking using simple variables (Use Case 2 limitations)
-        int singleRoomAvailability = 10;
-        int doubleRoomAvailability = 5;
-        int suiteRoomAvailability = 2;
 
-        // 1. Single Room Initialization
+        RoomInventory inventory = new RoomInventory();
+        Map<String, Integer> counts = inventory.getAllAvailability();
+
+
         SingleRoom single = new SingleRoom();
         System.out.println("Single Room:");
         single.displayRoomDetails();
-        System.out.println("Available: " + singleRoomAvailability + "\n");
+        System.out.println("Available Rooms: " + counts.get("Single") + "\n");
 
-        // 2. Double Room Initialization
+
         DoubleRoom dbl = new DoubleRoom();
         System.out.println("Double Room:");
         dbl.displayRoomDetails();
-        System.out.println("Available: " + doubleRoomAvailability + "\n");
+        System.out.println("Available Rooms: " + counts.get("Double") + "\n");
 
-        // 3. Suite Room Initialization
         SuiteRoom suite = new SuiteRoom();
         System.out.println("Suite Room:");
         suite.displayRoomDetails();
-        System.out.println("Available: " + suiteRoomAvailability + "\n");
+        System.out.println("Available Rooms: " + counts.get("Suite") + "\n");
     }
 }
